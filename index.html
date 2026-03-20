@@ -230,11 +230,35 @@
       flatShading: false
     });
 
-    // Build numbers from 3D box geometry
+    // Build numbers from rounded 3D boxes
     const group = new THREE.Group();
+    const radius = 0.08; // corner radius
+
+    function makeRoundedRect(w, h, r) {
+      r = Math.min(r, w / 2, h / 2);
+      const shape = new THREE.Shape();
+      shape.moveTo(-w/2 + r, -h/2);
+      shape.lineTo(w/2 - r, -h/2);
+      shape.quadraticCurveTo(w/2, -h/2, w/2, -h/2 + r);
+      shape.lineTo(w/2, h/2 - r);
+      shape.quadraticCurveTo(w/2, h/2, w/2 - r, h/2);
+      shape.lineTo(-w/2 + r, h/2);
+      shape.quadraticCurveTo(-w/2, h/2, -w/2, h/2 - r);
+      shape.lineTo(-w/2, -h/2 + r);
+      shape.quadraticCurveTo(-w/2, -h/2, -w/2 + r, -h/2);
+      return shape;
+    }
 
     function addBox(x, y, w, h, d, material) {
-      const geo = new THREE.BoxGeometry(w, h, d);
+      const shape = makeRoundedRect(w, h, radius);
+      const geo = new THREE.ExtrudeGeometry(shape, {
+        depth: d,
+        bevelEnabled: true,
+        bevelThickness: 0.03,
+        bevelSize: 0.03,
+        bevelSegments: 3
+      });
+      geo.center();
       const mesh = new THREE.Mesh(geo, material);
       mesh.position.set(x + w/2, -(y + h/2), 0);
       group.add(mesh);
@@ -285,15 +309,17 @@
     addBox(cx, bh - t, bw, t, d, redMat);
     cx += bw + gap;
 
-    // ---- "0" ---- (blue)
+    // ---- "0" ---- (blue) - slightly narrower to read as 0 not D
+    const ow = bw * 0.85; // narrower than other digits
+    const oOffset = (bw - ow) / 2; // center it in the same width slot
     // top bar
-    addBox(cx, 0, bw, t, d, blueMat);
+    addBox(cx + oOffset, 0, ow, t, d, blueMat);
     // bottom bar
-    addBox(cx, bh - t, bw, t, d, blueMat);
+    addBox(cx + oOffset, bh - t, ow, t, d, blueMat);
     // left bar
-    addBox(cx, 0, t, bh, d, blueMat);
+    addBox(cx + oOffset, 0, t, bh, d, blueMat);
     // right bar
-    addBox(cx + bw - t, 0, t, bh, d, blueMat);
+    addBox(cx + oOffset + ow - t, 0, t, bh, d, blueMat);
 
     // Center the group vertically
     group.position.y = bh / 2;
@@ -304,8 +330,10 @@
     let isDragging = false;
     let previousX = 0;
     let previousY = 0;
-    let velocityZ = 0;
-    let targetRotZ = 0;
+    let velocityX = 0;
+    let velocityY = 0;
+    let targetRotX = 0;
+    let targetRotY = 0;
 
     const canvas = renderer.domElement;
     canvas.style.cursor = 'grab';
@@ -316,25 +344,21 @@
       const point = e.touches ? e.touches[0] : e;
       previousX = point.clientX;
       previousY = point.clientY;
-      velocityZ = 0;
+      velocityX = 0;
+      velocityY = 0;
     }
 
     function onPointerMove(e) {
       if (!isDragging) return;
       e.preventDefault();
       const point = e.touches ? e.touches[0] : e;
-      // Calculate rotation based on angular movement around the center
-      const rect = canvas.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      const prevAngle = Math.atan2(previousY - centerY, previousX - centerX);
-      const currAngle = Math.atan2(point.clientY - centerY, point.clientX - centerX);
-      let delta = currAngle - prevAngle;
-      // Normalize delta to avoid jumps
-      if (delta > Math.PI) delta -= 2 * Math.PI;
-      if (delta < -Math.PI) delta += 2 * Math.PI;
-      velocityZ = delta;
-      targetRotZ += delta;
+      const dx = point.clientX - previousX;
+      const dy = point.clientY - previousY;
+      velocityX = dx * 0.005;
+      velocityY = dy * 0.005;
+      targetRotY += dx * 0.005;
+      targetRotX += dy * 0.005;
+      targetRotX = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, targetRotX));
       previousX = point.clientX;
       previousY = point.clientY;
     }
@@ -351,21 +375,23 @@
     window.addEventListener('touchmove', onPointerMove, { passive: false });
     window.addEventListener('touchend', onPointerUp);
 
-    // Animate with momentum + idle clock rotation
+    // Animate with momentum + idle horizontal spin
     const idleSpeed = 0.005;
 
     function animate() {
       requestAnimationFrame(animate);
       if (!isDragging) {
-        velocityZ *= 0.97;
-        targetRotZ += velocityZ;
-        // Idle clock-like rotation when velocity has decayed
-        if (Math.abs(velocityZ) < 0.0001) {
-          targetRotZ += idleSpeed;
+        velocityX *= 0.97;
+        velocityY *= 0.97;
+        targetRotY += velocityX;
+        targetRotX += velocityY;
+        targetRotX = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, targetRotX));
+        if (Math.abs(velocityX) < 0.0001) {
+          targetRotY += idleSpeed;
         }
       }
-      // Smooth interpolation on Z axis (clock rotation)
-      group.rotation.z += (targetRotZ - group.rotation.z) * 0.1;
+      group.rotation.y += (targetRotY - group.rotation.y) * 0.1;
+      group.rotation.x += (targetRotX - group.rotation.x) * 0.1;
       renderer.render(scene, camera);
     }
     animate();
