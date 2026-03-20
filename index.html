@@ -14,11 +14,11 @@
       background: #f5f0eb;
       color: #1a1a2e;
       height: 100vh;
+      height: 100dvh;
       overflow: hidden;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: space-between;
     }
 
     .spacer { flex: 1; }
@@ -29,15 +29,17 @@
       align-items: center;
       justify-content: center;
       width: 100%;
+      min-height: 0;
     }
 
     #canvas-container canvas {
       display: block;
       max-width: 100%;
+      max-height: 100%;
     }
 
     .bottom {
-      flex: 1;
+      flex-shrink: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -161,7 +163,7 @@
     <button class="close-btn" onclick="toggleInfo()">&times;</button>
     <div class="info-content">
       <h2>Funding the Future</h2>
-      <p>1230 is a venture capital firm backing early-stage companies with the conviction, capital, and support to build something lasting. We believe the best founders see what others don't — and we're here to help them get there.</p>
+      <p>1230 Ventures backs high-conviction opportunities through both primary and secondary investments. We believe the best businesses see what others don't, and we're here to help them get there.</p>
       <a href="mailto:hello@1230.vc">hello@1230.vc</a>
     </div>
   </div>
@@ -175,8 +177,8 @@
 
     // Three.js setup
     const container = document.getElementById('canvas-container');
-    const width = window.innerWidth;
-    const height = window.innerHeight * 0.55;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
@@ -297,18 +299,81 @@
 
     scene.add(group);
 
-    // Animate
+    // Drag-to-rotate interaction
+    let isDragging = false;
+    let previousX = 0;
+    let previousY = 0;
+    let velocityX = 0;
+    let velocityY = 0;
+    let targetRotX = 0;
+    let targetRotY = 0;
+
+    // Set initial idle spin
+    velocityX = 0.005;
+
+    const canvas = renderer.domElement;
+    canvas.style.cursor = 'grab';
+
+    function onPointerDown(e) {
+      isDragging = true;
+      canvas.style.cursor = 'grabbing';
+      const point = e.touches ? e.touches[0] : e;
+      previousX = point.clientX;
+      previousY = point.clientY;
+      velocityX = 0;
+      velocityY = 0;
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+      e.preventDefault();
+      const point = e.touches ? e.touches[0] : e;
+      const dx = point.clientX - previousX;
+      const dy = point.clientY - previousY;
+      velocityX = dx * 0.005;
+      velocityY = dy * 0.005;
+      targetRotY += dx * 0.005;
+      targetRotX += dy * 0.005;
+      // Clamp vertical rotation
+      targetRotX = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, targetRotX));
+      previousX = point.clientX;
+      previousY = point.clientY;
+    }
+
+    function onPointerUp() {
+      isDragging = false;
+      canvas.style.cursor = 'grab';
+    }
+
+    canvas.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+    canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+    window.addEventListener('touchmove', onPointerMove, { passive: false });
+    window.addEventListener('touchend', onPointerUp);
+
+    // Animate with momentum
     function animate() {
       requestAnimationFrame(animate);
-      group.rotation.y += 0.005;
+      if (!isDragging) {
+        // Apply friction to velocity for momentum
+        velocityX *= 0.97;
+        velocityY *= 0.97;
+        targetRotY += velocityX;
+        targetRotX += velocityY;
+        targetRotX = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, targetRotX));
+      }
+      // Smooth interpolation
+      group.rotation.y += (targetRotY - group.rotation.y) * 0.1;
+      group.rotation.x += (targetRotX - group.rotation.x) * 0.1;
       renderer.render(scene, camera);
     }
     animate();
 
     // Handle resize
     window.addEventListener('resize', () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight * 0.55;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
