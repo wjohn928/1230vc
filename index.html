@@ -19,6 +19,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
     }
 
     .spacer { flex: 1; }
@@ -353,6 +354,9 @@
     window.addEventListener('touchend', onPointerUp);
 
     // Animate with momentum
+    const idleSpeed = 0.005;
+    let hasBeenDragged = false;
+
     function animate() {
       requestAnimationFrame(animate);
       if (!isDragging) {
@@ -362,6 +366,10 @@
         targetRotY += velocityX;
         targetRotX += velocityY;
         targetRotX = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, targetRotX));
+        // Constant idle spin when velocity has decayed
+        if (Math.abs(velocityX) < 0.0001) {
+          targetRotY += idleSpeed;
+        }
       }
       // Smooth interpolation
       group.rotation.y += (targetRotY - group.rotation.y) * 0.1;
