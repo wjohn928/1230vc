@@ -304,13 +304,8 @@
     let isDragging = false;
     let previousX = 0;
     let previousY = 0;
-    let velocityX = 0;
-    let velocityY = 0;
-    let targetRotX = 0;
-    let targetRotY = 0;
-
-    // Set initial idle spin
-    velocityX = 0.005;
+    let velocityZ = 0;
+    let targetRotZ = 0;
 
     const canvas = renderer.domElement;
     canvas.style.cursor = 'grab';
@@ -321,22 +316,25 @@
       const point = e.touches ? e.touches[0] : e;
       previousX = point.clientX;
       previousY = point.clientY;
-      velocityX = 0;
-      velocityY = 0;
+      velocityZ = 0;
     }
 
     function onPointerMove(e) {
       if (!isDragging) return;
       e.preventDefault();
       const point = e.touches ? e.touches[0] : e;
-      const dx = point.clientX - previousX;
-      const dy = point.clientY - previousY;
-      velocityX = dx * 0.005;
-      velocityY = dy * 0.005;
-      targetRotY += dx * 0.005;
-      targetRotX += dy * 0.005;
-      // Clamp vertical rotation
-      targetRotX = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, targetRotX));
+      // Calculate rotation based on angular movement around the center
+      const rect = canvas.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const prevAngle = Math.atan2(previousY - centerY, previousX - centerX);
+      const currAngle = Math.atan2(point.clientY - centerY, point.clientX - centerX);
+      let delta = currAngle - prevAngle;
+      // Normalize delta to avoid jumps
+      if (delta > Math.PI) delta -= 2 * Math.PI;
+      if (delta < -Math.PI) delta += 2 * Math.PI;
+      velocityZ = delta;
+      targetRotZ += delta;
       previousX = point.clientX;
       previousY = point.clientY;
     }
@@ -353,27 +351,21 @@
     window.addEventListener('touchmove', onPointerMove, { passive: false });
     window.addEventListener('touchend', onPointerUp);
 
-    // Animate with momentum
+    // Animate with momentum + idle clock rotation
     const idleSpeed = 0.005;
-    let hasBeenDragged = false;
 
     function animate() {
       requestAnimationFrame(animate);
       if (!isDragging) {
-        // Apply friction to velocity for momentum
-        velocityX *= 0.97;
-        velocityY *= 0.97;
-        targetRotY += velocityX;
-        targetRotX += velocityY;
-        targetRotX = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, targetRotX));
-        // Constant idle spin when velocity has decayed
-        if (Math.abs(velocityX) < 0.0001) {
-          targetRotY += idleSpeed;
+        velocityZ *= 0.97;
+        targetRotZ += velocityZ;
+        // Idle clock-like rotation when velocity has decayed
+        if (Math.abs(velocityZ) < 0.0001) {
+          targetRotZ += idleSpeed;
         }
       }
-      // Smooth interpolation
-      group.rotation.y += (targetRotY - group.rotation.y) * 0.1;
-      group.rotation.x += (targetRotX - group.rotation.x) * 0.1;
+      // Smooth interpolation on Z axis (clock rotation)
+      group.rotation.z += (targetRotZ - group.rotation.z) * 0.1;
       renderer.render(scene, camera);
     }
     animate();
